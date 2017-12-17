@@ -1,0 +1,7 @@
+memo = "97dcc3b79e75ee123635fd6ab4ae0bd6a080e110441c0a1fcee80d31ec9eeb53"
+
+[[projects]]
+  name = "github.com/timtadh/data-structures"
+  packages = ["errors","tree","tree/avl","types"]
+  revision = "cd0c1de5390876f92ce0762c9c626a569b124f24"
+  version = "v0.5.2"
