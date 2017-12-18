@@ -22,6 +22,10 @@ logtop also tracks the rates of events, over a short window of time.
 
 real-time counts of stuff. it shows you the highest counts. you decide which stuff you feed into it. but it's probably going to be fields extracted from a log file.
 
+fine let me just show you what it looks like:
+
+![animated gif showing the tool in action](demo.gif)
+
 ## example usage
 
 tail a heroku log stream and look at frequent (method, path) pairs.
