@@ -15,11 +15,11 @@ func consumeStdin(top *logtop.TopNTree, mon *logtop.RateMonitor) {
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		if err := top.Increment(line); err != nil {
+		if err := top.Increment(line, time.Now()); err != nil {
 			fmt.Fprintln(os.Stderr, "error: incrementing counter:", err)
 			os.Exit(1)
 		}
-		if err := top.Increment("total"); err != nil {
+		if err := top.Increment("total", time.Now()); err != nil {
 			fmt.Fprintln(os.Stderr, "error: incrementing counter:", err)
 			os.Exit(1)
 		}
@@ -134,9 +134,25 @@ func termUI(top *logtop.TopNTree, mon *logtop.RateMonitor) {
 	ui.Loop()
 }
 
+func debugUI(top *logtop.TopNTree) {
+	var err error
+	if err = top.Increment("foo", time.Now()); err != nil {
+		fmt.Fprintln(os.Stderr, "error: reading standard input:", err)
+	}
+	if err = top.Increment("foo", time.Now()); err != nil {
+		fmt.Fprintln(os.Stderr, "error: reading standard input:", err)
+	}
+	for _, tup := range top.TopN(5) {
+		fmt.Println(tup.Count, tup.ID)
+	}
+	os.Exit(32)
+}
+
 func main() {
 	top := logtop.NewTopNTree()
 	mon := logtop.NewRateMonitor()
+
+	// debugUI(top)
 
 	go consumeStdin(top, mon)
 	go pruneOld(top)

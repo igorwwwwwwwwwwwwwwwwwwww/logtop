@@ -1,9 +1,6 @@
 package logtop
 
 import (
-	"encoding/binary"
-	"fmt"
-	"hash/fnv"
 	"sync"
 	"time"
 
@@ -16,70 +13,50 @@ type Tuple struct {
 	ID        string
 	Count     uint64
 	UpdatedAt time.Time
+
+	indexFieldCache map[string]Field
 }
 
-type IndexedByCount struct {
-	Tup *Tuple
+func (tup *Tuple) FlushIndexFieldCache(key string) {
+	delete(tup.indexFieldCache, key)
 }
 
-func (k *IndexedByCount) Equals(b types.Equatable) bool {
-	if b, ok := b.(*IndexedByCount); ok {
-		return k.Tup.ID == b.Tup.ID && k.Tup.Count == b.Tup.Count
+func (tup *Tuple) IndexedByCount() Field {
+	if f, ok := tup.indexFieldCache["Count"]; ok {
+		return f
 	}
-	panic(fmt.Sprintf("expected *IndexedByCount, got: %v", b))
-	return false
-}
-func (k *IndexedByCount) Less(b types.Sortable) bool {
-	if b, ok := b.(*IndexedByCount); ok {
-		if k.Tup.Count == b.Tup.Count {
-			return types.String(k.Tup.ID).Less(types.String(b.Tup.ID))
-		}
-		return k.Tup.Count < b.Tup.Count
+
+	f := &CompoundField{
+		Fields: []Field{
+			&Uint64Field{tup.Count},
+			&StringField{tup.ID},
+		},
 	}
-	panic(fmt.Sprintf("expected *IndexedByCount, got: %v", b))
-	return false
-}
-func (k *IndexedByCount) Hash() int {
-	h := fnv.New32a()
-	h.Write([]byte(string(k.Tup.ID)))
-
-	b := make([]byte, 8)
-	binary.LittleEndian.PutUint64(b, k.Tup.Count)
-	h.Write(b)
-
-	return int(h.Sum32())
+	tup.indexFieldCache["count"] = f
+	return f
 }
 
-type IndexedByUpdatedAt struct {
-	Tup *Tuple
-}
-
-func (k *IndexedByUpdatedAt) Equals(b types.Equatable) bool {
-	if b, ok := b.(*IndexedByUpdatedAt); ok {
-		return k.Tup.ID == b.Tup.ID && k.Tup.UpdatedAt == b.Tup.UpdatedAt
+func (tup *Tuple) IndexedByUpdatedAt() Field {
+	if f, ok := tup.indexFieldCache["UpdatedAt"]; ok {
+		return f
 	}
-	panic(fmt.Sprintf("expected *IndexedByUpdatedAt, got: %v", b))
-	return false
-}
-func (k *IndexedByUpdatedAt) Less(b types.Sortable) bool {
-	if b, ok := b.(*IndexedByUpdatedAt); ok {
-		if k.Tup.UpdatedAt == b.Tup.UpdatedAt {
-			return types.String(k.Tup.ID).Less(types.String(b.Tup.ID))
-		}
-		return k.Tup.UpdatedAt.Before(b.Tup.UpdatedAt)
+
+	f := &CompoundField{
+		Fields: []Field{
+			&Uint64Field{uint64(tup.UpdatedAt.UnixNano())},
+			&StringField{tup.ID},
+		},
 	}
-	panic(fmt.Sprintf("expected *IndexedByUpdatedAt, got: %v", b))
-	return false
+	tup.indexFieldCache["count"] = f
+	return f
 }
-func (k *IndexedByUpdatedAt) Hash() int {
-	h := fnv.New32a()
-	h.Write([]byte(string(k.Tup.ID)))
 
-	b := make([]byte, 8)
-	binary.LittleEndian.PutUint64(b, uint64(k.Tup.UpdatedAt.UnixNano()))
-	h.Write(b)
-
-	return int(h.Sum32())
+func NewTuple(id string) *Tuple {
+	return &Tuple{
+		ID:              id,
+		Count:           0,
+		indexFieldCache: make(map[string]Field),
+	}
 }
 
 type TopNTree struct {
@@ -98,38 +75,35 @@ func NewTopNTree() *TopNTree {
 	}
 }
 
-func (top *TopNTree) Increment(id string) error {
+func (top *TopNTree) Increment(id string, updatedAt time.Time) error {
 	top.m.Lock()
 	defer top.m.Unlock()
 
 	tup, ok := top.table[id]
 	if !ok {
-		tup = &Tuple{
-			ID:    id,
-			Count: 0,
-		}
+		tup = NewTuple(id)
 		top.table[id] = tup
 	}
 
-	k1 := &IndexedByCount{Tup: tup}
-	k2 := &IndexedByUpdatedAt{Tup: tup}
-
 	if ok {
-		_, err := top.countIndex.Remove(k1)
+		_, err := top.countIndex.Remove(tup.IndexedByCount())
 		if err != nil {
 			return err
 		}
-		_, err = top.updatedAtIndex.Remove(k2)
+		_, err = top.updatedAtIndex.Remove(tup.IndexedByUpdatedAt())
 		if err != nil {
 			return err
 		}
+
+		tup.FlushIndexFieldCache("Count")
+		tup.FlushIndexFieldCache("UpdatedAt")
 	}
 
 	tup.Count++
-	tup.UpdatedAt = time.Now()
+	tup.UpdatedAt = updatedAt
 
-	top.countIndex.Put(k1, tup)
-	top.updatedAtIndex.Put(k2, tup)
+	top.countIndex.Put(tup.IndexedByCount(), tup)
+	top.updatedAtIndex.Put(tup.IndexedByUpdatedAt(), tup)
 
 	return nil
 }
@@ -162,8 +136,8 @@ func (top *TopNTree) PruneBefore(before time.Time) {
 		if before.Before(tup.UpdatedAt) {
 			break
 		}
-		top.countIndex.Remove(&IndexedByCount{Tup: tup})
-		top.updatedAtIndex.Remove(&IndexedByUpdatedAt{Tup: tup})
+		top.countIndex.Remove(tup.IndexedByCount())
+		top.updatedAtIndex.Remove(tup.IndexedByUpdatedAt())
 		delete(top.table, tup.ID)
 	}
 }
