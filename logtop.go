@@ -32,7 +32,7 @@ func (tup *Tuple) IndexedByCount() Field {
 			&StringField{tup.ID},
 		},
 	}
-	tup.indexFieldCache["count"] = f
+	tup.indexFieldCache["Count"] = f
 	return f
 }
 
@@ -47,7 +47,7 @@ func (tup *Tuple) IndexedByUpdatedAt() Field {
 			&StringField{tup.ID},
 		},
 	}
-	tup.indexFieldCache["count"] = f
+	tup.indexFieldCache["UpdatedAt"] = f
 	return f
 }
 
