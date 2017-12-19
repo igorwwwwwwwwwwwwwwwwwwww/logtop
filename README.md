@@ -18,6 +18,8 @@ fetching the top n elements takes O(log n) time, thanks to the avl tree.
 
 logtop also tracks the rates of events, over a short window of time.
 
+it's basically mongodb.
+
 ## uuh, that's a lot of text, please just explain what it does ok?
 
 real-time counts of stuff. it shows you the highest counts. you decide which stuff you feed into it. but it's probably going to be fields extracted from a log file.
