@@ -34,24 +34,34 @@ func consumeStdin(top *logtop.TopNTree, mon *logtop.RateMonitor) {
 	}
 }
 
+func pruneOld(top *logtop.TopNTree) {
+	pruneIntervalSeconds := 30 * time.Second
+
+	time.Sleep(pruneIntervalSeconds)
+	for {
+		top.PruneBefore(time.Now().Add(-pruneIntervalSeconds))
+		time.Sleep(pruneIntervalSeconds)
+	}
+}
+
 func sleepUI(top *logtop.TopNTree, mon *logtop.RateMonitor) {
 	for {
 		time.Sleep(1 * time.Second)
 
 		rates := mon.Snapshot()
 
-		for _, e := range top.TopN(6) {
+		for _, tup := range top.TopN(6) {
 			rateStr := ""
-			if rate, ok := rates[e.Line]; ok {
+			if rate, ok := rates[tup.ID]; ok {
 				rateStr = fmt.Sprintf("(%0.2f/s)", rate)
 			}
-			fmt.Println(e.Count, e.Line, rateStr)
+			fmt.Println(tup.Count, tup.ID, rateStr)
 		}
 		fmt.Println()
 	}
 
-	for _, e := range top.TopN(5) {
-		fmt.Println(e.Count, e.Line)
+	for _, tup := range top.TopN(5) {
+		fmt.Println(tup.Count, tup.ID)
 	}
 }
 
@@ -100,6 +110,7 @@ func termUI(top *logtop.TopNTree, mon *logtop.RateMonitor) {
 	ui.Handle("/timer/1s", func(e ui.Event) {
 		// update every 2s
 		t := e.Data.(ui.EvtTimer)
+
 		if t.Count%2 != 0 {
 			return
 		}
@@ -108,12 +119,12 @@ func termUI(top *logtop.TopNTree, mon *logtop.RateMonitor) {
 		rates := mon.Snapshot()
 
 		strs := []string{}
-		for _, e := range top.TopN(uint64(n)) {
-			rate, ok := rates[e.Line]
+		for _, tup := range top.TopN(uint64(n)) {
+			rate, ok := rates[tup.ID]
 			if !ok {
 				rate = 0.0
 			}
-			strs = append(strs, fmt.Sprintf("%d %s (%0.2f/s)\n", e.Count, e.Line, rate))
+			strs = append(strs, fmt.Sprintf("%d %s (%0.2f/s)\n", tup.Count, tup.ID, rate))
 		}
 
 		ls.Items = strs
@@ -128,6 +139,7 @@ func main() {
 	mon := logtop.NewRateMonitor()
 
 	go consumeStdin(top, mon)
+	go pruneOld(top)
 
 	// sleepUI(top, mon)
 	termUI(top, mon)

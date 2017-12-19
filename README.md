@@ -12,7 +12,7 @@ internally, it stores counts in an avl tree, in order (get it) to be able to ret
 
 this takes O(n) space where n is the cardinality of the input stream, as all lines are stored in the tree and also in a hash map). even with high cardinality streams, this is often acceptable.
 
-we do not retain timing information, which would allow old events to be pruned. this is a possible future extension.
+we also retain timing about when an event was last seen, which allows old events to be pruned periodically.
 
 fetching the top n elements takes O(log n) time, thanks to the avl tree.
 
