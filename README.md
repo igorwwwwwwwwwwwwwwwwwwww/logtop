@@ -35,3 +35,7 @@ tail a heroku log stream and look at frequent (method, path) pairs.
 ```
 heroku logs --tail -a <app> | awk '{ if ($2 == "heroku[router]:") { print $4, $5 } }' | go run cmd/logtop/main.go
 ```
+
+## todo
+
+* sharelock?
