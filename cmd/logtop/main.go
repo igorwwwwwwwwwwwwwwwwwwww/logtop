@@ -7,7 +7,8 @@ import (
 	"os"
 	"time"
 
-	ui "github.com/gizak/termui"
+	ui "github.com/gizak/termui/v3"
+	"github.com/gizak/termui/v3/widgets"
 	"github.com/google/gops/agent"
 	"github.com/igorwwwwwwwwwwwwwwwwwwww/logtop"
 )
@@ -75,65 +76,53 @@ func termUI(top *logtop.TopNTree, mon *logtop.RateMonitor) {
 	}
 	defer ui.Close()
 
-	ls := ui.NewList()
-	ls.Items = []string{"waiting..."}
-	ls.ItemFgColor = ui.ColorYellow
-	ls.BorderLabel = "top k"
-	ls.Height = ui.TermHeight()
+	width, height := ui.TerminalDimensions()
 
-	ui.Body.AddRows(
-		ui.NewRow(
-			ui.NewCol(12, 0, ls),
-		),
-	)
+	l := widgets.NewList()
+	l.Title = "top k"
+	l.Rows = []string{"waiting..."}
+	l.TextStyle = ui.NewStyle(ui.ColorYellow)
+	l.WrapText = false
+	l.SetRect(0, 0, width, height)
 
-	ui.Body.Width = ui.TermWidth()
+	ui.Render(l)
 
-	ui.Body.Align()
-	ui.Render(ui.Body)
+	events := ui.PollEvents()
+	ticker := time.NewTicker(2 * time.Second)
 
-	ui.Handle("/sys/kbd/q", func(ui.Event) {
-		ui.StopLoop()
-	})
-
-	ui.Handle("/sys/kbd/C-c", func(ui.Event) {
-		ui.StopLoop()
-	})
-
-	ui.Handle("/sys/wnd/resize", func(ui.Event) {
-		ls.Height = ui.TermHeight()
-
-		ui.Body.Width = ui.TermWidth()
-		ui.Body.Align()
-
-		ui.Render(ui.Body)
-	})
-
-	ui.Handle("/timer/1s", func(e ui.Event) {
-		// update every 2s
-		t := e.Data.(ui.EvtTimer)
-
-		if t.Count%2 != 0 {
-			return
-		}
-
-		n := ui.TermHeight()
-		rates := mon.Snapshot()
-
-		strs := []string{}
-		for _, tup := range top.TopN(uint64(n)) {
-			rate, ok := rates[tup.ID]
-			if !ok {
-				rate = 0.0
+	for {
+		select {
+		case e := <-events:
+			if e.Type == ui.KeyboardEvent && e.ID == "q" {
+				return
 			}
-			strs = append(strs, fmt.Sprintf("%d %s (%0.2f/s)\n", tup.Count, tup.ID, rate))
+			if e.Type == ui.KeyboardEvent && e.ID == "<C-c>" {
+				return
+			}
+			if e.ID == "<Resize>" {
+				payload := e.Payload.(ui.Resize)
+				width, height = payload.Width, payload.Height
+				l.SetRect(0, 0, width, height)
+				ui.Render(l)
+				continue
+			}
+			// fmt.Printf("%+v\n", e)
+		case <-ticker.C:
+			rates := mon.Snapshot()
+
+			strs := []string{}
+			for _, tup := range top.TopN(uint64(height)) {
+				rate, ok := rates[tup.ID]
+				if !ok {
+					rate = 0.0
+				}
+				strs = append(strs, fmt.Sprintf("%d %s (%0.2f/s)", tup.Count, tup.ID, rate))
+			}
+
+			l.Rows = strs
+			ui.Render(l)
 		}
-
-		ls.Items = strs
-		ui.Render(ls)
-	})
-
-	ui.Loop()
+	}
 }
 
 func debugUI(top *logtop.TopNTree) {

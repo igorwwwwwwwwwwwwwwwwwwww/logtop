@@ -39,3 +39,4 @@ heroku logs --tail -a <app> | awk '{ if ($2 == "heroku[router]:") { print $4, $5
 ## todo
 
 * batching, or make single threaded and remove locks completely
+* time partitioning
