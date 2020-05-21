@@ -11,6 +11,7 @@ import (
 	"github.com/gizak/termui/v3/widgets"
 	"github.com/google/gops/agent"
 	"github.com/igorwwwwwwwwwwwwwwwwwwww/logtop"
+	"github.com/pkg/profile"
 )
 
 func consumeStdin(ch chan<- string, done chan<- interface{}) {
@@ -49,7 +50,7 @@ func termUI(top *logtop.TopNTree, mon *logtop.RateMonitor, ch <-chan string, don
 	pruneIntervalSeconds := 30 * time.Second
 
 	events := ui.PollEvents()
-	ticker := time.NewTicker(time.Millisecond * 1000 / 60)
+	ticker := time.NewTicker(1000 * time.Millisecond)
 	rateTicker := time.NewTicker(1 * time.Second)
 	pruneTicker := time.NewTicker(pruneIntervalSeconds)
 
@@ -59,7 +60,7 @@ func termUI(top *logtop.TopNTree, mon *logtop.RateMonitor, ch <-chan string, don
 		select {
 		case line, ok := <-ch:
 			if !ok {
-				continue
+				break
 			}
 
 			top.Increment(line, time.Now())
@@ -105,6 +106,8 @@ func termUI(top *logtop.TopNTree, mon *logtop.RateMonitor, ch <-chan string, don
 
 			l.Rows = strs
 			ui.Render(l)
+
+			return
 		case <-rateTicker.C:
 			rates = mon.Snapshot()
 		case <-pruneTicker.C:
@@ -114,6 +117,21 @@ func termUI(top *logtop.TopNTree, mon *logtop.RateMonitor, ch <-chan string, don
 }
 
 func main() {
+	if pprofMode := os.Getenv("PPROF"); pprofMode != "" {
+		switch pprofMode {
+		case "cpu":
+			defer profile.Start(profile.CPUProfile).Stop()
+		case "goroutine":
+			defer profile.Start(profile.GoroutineProfile).Stop()
+		case "mem":
+			defer profile.Start(profile.MemProfile).Stop()
+		case "mutex":
+			defer profile.Start(profile.MutexProfile).Stop()
+		case "block":
+			defer profile.Start(profile.BlockProfile).Stop()
+		}
+	}
+
 	if err := agent.Listen(agent.Options{}); err != nil {
 		log.Fatal(err)
 	}

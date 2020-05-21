@@ -9,5 +9,6 @@ require (
 	github.com/google/gops v0.3.8
 	github.com/maruel/panicparse v1.0.2 // indirect
 	github.com/maruel/ut v1.0.1 // indirect
+	github.com/pkg/profile v1.5.0
 	github.com/timtadh/data-structures v0.5.2
 )
