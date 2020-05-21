@@ -3,10 +3,12 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"os"
 	"time"
 
 	ui "github.com/gizak/termui"
+	"github.com/google/gops/agent"
 	"github.com/igorwwwwwwwwwwwwwwwwwwww/logtop"
 )
 
@@ -76,7 +78,7 @@ func termUI(top *logtop.TopNTree, mon *logtop.RateMonitor) {
 	ls := ui.NewList()
 	ls.Items = []string{"waiting..."}
 	ls.ItemFgColor = ui.ColorYellow
-	ls.BorderLabel = "top n"
+	ls.BorderLabel = "top k"
 	ls.Height = ui.TermHeight()
 
 	ui.Body.AddRows(
@@ -149,6 +151,10 @@ func debugUI(top *logtop.TopNTree) {
 }
 
 func main() {
+	if err := agent.Listen(agent.Options{}); err != nil {
+		log.Fatal(err)
+	}
+
 	top := logtop.NewTopNTree()
 	mon := logtop.NewRateMonitor()
 

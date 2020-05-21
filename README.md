@@ -14,7 +14,7 @@ this takes O(n) space where n is the cardinality of the input stream, as all lin
 
 we also retain timing about when an event was last seen, which allows old events to be pruned periodically.
 
-fetching the top n elements takes O(log n) time, thanks to the avl tree.
+fetching the top k elements takes O(log n) time, thanks to the avl tree.
 
 logtop also tracks the rates of events, over a short window of time.
 
@@ -38,4 +38,4 @@ heroku logs --tail -a <app> | awk '{ if ($2 == "heroku[router]:") { print $4, $5
 
 ## todo
 
-* sharelock?
+* batching, or make single threaded and remove locks completely
