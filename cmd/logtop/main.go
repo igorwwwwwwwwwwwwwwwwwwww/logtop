@@ -37,37 +37,6 @@ func consumeStdin(top *logtop.TopNTree, mon *logtop.RateMonitor) {
 	}
 }
 
-func pruneOld(top *logtop.TopNTree) {
-	pruneIntervalSeconds := 30 * time.Second
-
-	time.Sleep(pruneIntervalSeconds)
-	for {
-		top.PruneBefore(time.Now().Add(-pruneIntervalSeconds))
-		time.Sleep(pruneIntervalSeconds)
-	}
-}
-
-func sleepUI(top *logtop.TopNTree, mon *logtop.RateMonitor) {
-	for {
-		time.Sleep(1 * time.Second)
-
-		rates := mon.Snapshot()
-
-		for _, tup := range top.TopN(6) {
-			rateStr := ""
-			if rate, ok := rates[tup.ID]; ok {
-				rateStr = fmt.Sprintf("(%0.2f/s)", rate)
-			}
-			fmt.Println(tup.Count, tup.ID, rateStr)
-		}
-		fmt.Println()
-	}
-
-	for _, tup := range top.TopN(5) {
-		fmt.Println(tup.Count, tup.ID)
-	}
-}
-
 func termUI(top *logtop.TopNTree, mon *logtop.RateMonitor) {
 	err := ui.Init()
 	if err != nil {
@@ -87,8 +56,11 @@ func termUI(top *logtop.TopNTree, mon *logtop.RateMonitor) {
 
 	ui.Render(l)
 
+	pruneIntervalSeconds := 30 * time.Second
+
 	events := ui.PollEvents()
-	ticker := time.NewTicker(2 * time.Second)
+	ticker := time.NewTicker(1 * time.Second)
+	pruneTicker := time.NewTicker(pruneIntervalSeconds)
 
 	for {
 		select {
@@ -121,22 +93,10 @@ func termUI(top *logtop.TopNTree, mon *logtop.RateMonitor) {
 
 			l.Rows = strs
 			ui.Render(l)
+		case <-pruneTicker.C:
+			top.PruneBefore(time.Now().Add(-pruneIntervalSeconds))
 		}
 	}
-}
-
-func debugUI(top *logtop.TopNTree) {
-	var err error
-	if err = top.Increment("foo", time.Now()); err != nil {
-		fmt.Fprintln(os.Stderr, "error: reading standard input:", err)
-	}
-	if err = top.Increment("foo", time.Now()); err != nil {
-		fmt.Fprintln(os.Stderr, "error: reading standard input:", err)
-	}
-	for _, tup := range top.TopN(5) {
-		fmt.Println(tup.Count, tup.ID)
-	}
-	os.Exit(32)
 }
 
 func main() {
@@ -147,11 +107,7 @@ func main() {
 	top := logtop.NewTopNTree()
 	mon := logtop.NewRateMonitor()
 
-	// debugUI(top)
-
 	go consumeStdin(top, mon)
-	go pruneOld(top)
 
-	// sleepUI(top, mon)
 	termUI(top, mon)
 }
