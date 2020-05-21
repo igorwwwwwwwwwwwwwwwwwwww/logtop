@@ -1,7 +1,6 @@
 package logtop
 
 import (
-	"sync"
 	"time"
 )
 
@@ -10,14 +9,9 @@ type RateMonitor struct {
 	lastSnapshotAt     time.Time
 
 	counts map[string]uint64
-
-	m *sync.Mutex
 }
 
 func (mon *RateMonitor) Record(val string) {
-	mon.m.Lock()
-	defer mon.m.Unlock()
-
 	if current, ok := mon.counts[val]; ok {
 		mon.counts[val] = current + 1
 	} else {
@@ -27,9 +21,6 @@ func (mon *RateMonitor) Record(val string) {
 
 // returns a set of rates since the last snapshot
 func (mon *RateMonitor) Snapshot() map[string]float64 {
-	mon.m.Lock()
-	defer mon.m.Unlock()
-
 	currentTime := time.Now()
 
 	// first time around, no rates to return
@@ -56,7 +47,5 @@ func (mon *RateMonitor) Snapshot() map[string]float64 {
 func NewRateMonitor() *RateMonitor {
 	return &RateMonitor{
 		counts: make(map[string]uint64),
-
-		m: &sync.Mutex{},
 	}
 }

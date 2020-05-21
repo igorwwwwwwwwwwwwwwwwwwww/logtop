@@ -13,23 +13,13 @@ import (
 	"github.com/igorwwwwwwwwwwwwwwwwwwww/logtop"
 )
 
-func consumeStdin(top *logtop.TopNTree, mon *logtop.RateMonitor) {
+func consumeStdin(ch chan<- string, done chan<- interface{}) {
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
-		line := scanner.Text()
-
-		if err := top.Increment(line, time.Now()); err != nil {
-			fmt.Fprintln(os.Stderr, "error: incrementing counter:", err)
-			os.Exit(1)
-		}
-		if err := top.Increment("total", time.Now()); err != nil {
-			fmt.Fprintln(os.Stderr, "error: incrementing counter:", err)
-			os.Exit(1)
-		}
-
-		mon.Record(line)
-		mon.Record("total")
+		ch <- scanner.Text()
 	}
+	close(ch)
+	close(done)
 
 	if err := scanner.Err(); err != nil {
 		fmt.Fprintln(os.Stderr, "error: reading standard input:", err)
@@ -37,7 +27,7 @@ func consumeStdin(top *logtop.TopNTree, mon *logtop.RateMonitor) {
 	}
 }
 
-func termUI(top *logtop.TopNTree, mon *logtop.RateMonitor) {
+func termUI(top *logtop.TopNTree, mon *logtop.RateMonitor, ch <-chan string, done <-chan interface{}) {
 	err := ui.Init()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
@@ -59,11 +49,24 @@ func termUI(top *logtop.TopNTree, mon *logtop.RateMonitor) {
 	pruneIntervalSeconds := 30 * time.Second
 
 	events := ui.PollEvents()
-	ticker := time.NewTicker(1 * time.Second)
+	ticker := time.NewTicker(time.Millisecond * 1000 / 60)
+	rateTicker := time.NewTicker(1 * time.Second)
 	pruneTicker := time.NewTicker(pruneIntervalSeconds)
+
+	rates := mon.Snapshot()
 
 	for {
 		select {
+		case line, ok := <-ch:
+			if !ok {
+				continue
+			}
+
+			top.Increment(line, time.Now())
+			top.Increment("total", time.Now())
+
+			mon.Record(line)
+			mon.Record("total")
 		case e := <-events:
 			if e.Type == ui.KeyboardEvent && e.ID == "q" {
 				return
@@ -80,8 +83,6 @@ func termUI(top *logtop.TopNTree, mon *logtop.RateMonitor) {
 			}
 			// fmt.Printf("%+v\n", e)
 		case <-ticker.C:
-			rates := mon.Snapshot()
-
 			strs := []string{}
 			for _, tup := range top.TopN(uint64(height)) {
 				rate, ok := rates[tup.ID]
@@ -93,6 +94,19 @@ func termUI(top *logtop.TopNTree, mon *logtop.RateMonitor) {
 
 			l.Rows = strs
 			ui.Render(l)
+		case <-done:
+			ticker.Stop()
+			pruneTicker.Stop()
+
+			strs := []string{}
+			for _, tup := range top.TopN(uint64(height)) {
+				strs = append(strs, fmt.Sprintf("%d %s", tup.Count, tup.ID))
+			}
+
+			l.Rows = strs
+			ui.Render(l)
+		case <-rateTicker.C:
+			rates = mon.Snapshot()
 		case <-pruneTicker.C:
 			top.PruneBefore(time.Now().Add(-pruneIntervalSeconds))
 		}
@@ -104,10 +118,12 @@ func main() {
 		log.Fatal(err)
 	}
 
+	ch := make(chan string, 1024)
+	done := make(chan interface{})
+	go consumeStdin(ch, done)
+
 	top := logtop.NewTopNTree()
 	mon := logtop.NewRateMonitor()
 
-	go consumeStdin(top, mon)
-
-	termUI(top, mon)
+	termUI(top, mon, ch, done)
 }

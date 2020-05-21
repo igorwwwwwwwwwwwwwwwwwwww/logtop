@@ -1,7 +1,6 @@
 package logtop
 
 import (
-	"sync"
 	"time"
 
 	"github.com/timtadh/data-structures/tree"
@@ -63,7 +62,6 @@ type TopNTree struct {
 	countIndex     *avl.AvlTree
 	updatedAtIndex *avl.AvlTree
 	table          map[string]*Tuple
-	m              *sync.Mutex
 }
 
 func NewTopNTree() *TopNTree {
@@ -71,14 +69,10 @@ func NewTopNTree() *TopNTree {
 		countIndex:     &avl.AvlTree{},
 		updatedAtIndex: &avl.AvlTree{},
 		table:          make(map[string]*Tuple),
-		m:              &sync.Mutex{},
 	}
 }
 
-func (top *TopNTree) Increment(id string, updatedAt time.Time) error {
-	top.m.Lock()
-	defer top.m.Unlock()
-
+func (top *TopNTree) Increment(id string, updatedAt time.Time) {
 	tup, ok := top.table[id]
 	if !ok {
 		tup = NewTuple(id)
@@ -86,14 +80,8 @@ func (top *TopNTree) Increment(id string, updatedAt time.Time) error {
 	}
 
 	if ok {
-		_, err := top.countIndex.Remove(tup.IndexedByCount())
-		if err != nil {
-			return err
-		}
-		_, err = top.updatedAtIndex.Remove(tup.IndexedByUpdatedAt())
-		if err != nil {
-			return err
-		}
+		top.countIndex.Remove(tup.IndexedByCount())
+		top.updatedAtIndex.Remove(tup.IndexedByUpdatedAt())
 
 		tup.FlushIndexFieldCache("Count")
 		tup.FlushIndexFieldCache("UpdatedAt")
@@ -104,14 +92,9 @@ func (top *TopNTree) Increment(id string, updatedAt time.Time) error {
 
 	top.countIndex.Put(tup.IndexedByCount(), tup)
 	top.updatedAtIndex.Put(tup.IndexedByUpdatedAt(), tup)
-
-	return nil
 }
 
 func (top *TopNTree) TopN(n uint64) []Tuple {
-	top.m.Lock()
-	defer top.m.Unlock()
-
 	tups := []Tuple{}
 
 	for _, tup, next := top.iterateByCountDesc()(); next != nil; _, tup, next = next() {
@@ -128,9 +111,6 @@ func (top *TopNTree) TopN(n uint64) []Tuple {
 }
 
 func (top *TopNTree) PruneBefore(before time.Time) {
-	top.m.Lock()
-	defer top.m.Unlock()
-
 	for _, tup, next := top.iterateByUpdatedAtAsc()(); next != nil; _, tup, next = next() {
 		tup := tup.(*Tuple)
 		if before.Before(tup.UpdatedAt) {
